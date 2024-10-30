@@ -1,0 +1,8 @@
+[package]
+name = "mcro"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+evdev = "0.12.2"
+uinput = "0.1.3"
