@@ -1,0 +1,6 @@
+[Unit]
+Description=mcro - macros and shortcuts
+
+[Service]
+Environment="PATH=%h/.cargo/bin"
+ExecStart=mcro
