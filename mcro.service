@@ -2,5 +2,6 @@
 Description=mcro - macros and shortcuts
 
 [Service]
-Environment="PATH=%h/.cargo/bin"
-ExecStart=mcro
+ExecStart=%h/.cargo/bin/mcro
+Restart=on-failure
+RestartSec=1

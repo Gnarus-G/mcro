@@ -22,8 +22,6 @@ fn main() -> Result<()> {
 
     loop {
         for event in device.fetch_events()? {
-            eprintln!("[DEBUG] {:?}", event);
-
             match event.kind() {
                 evdev::InputEventKind::Key(key) => {
                     if key == Key::KEY_A {
@@ -49,7 +47,9 @@ fn main() -> Result<()> {
                 evdev::InputEventKind::Synchronization(_) => {
                     kbd.emit(&[event])?;
                 }
-                _ => {}
+                _ => {
+                    // eprintln!("[DEBUG] {:?}", event);
+                }
             };
         }
     }
