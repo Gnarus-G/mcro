@@ -1,6 +1,9 @@
 [Unit]
 Description=mcro - macros and shortcuts
 
+[Install]
+WantedBy=default.target
+
 [Service]
 ExecStart=%h/.cargo/bin/mcro
 Restart=on-failure

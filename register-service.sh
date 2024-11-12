@@ -4,7 +4,6 @@ set -xe
 
 cp ./mcro.service ~/.config/systemd/user/
 
-systemctl --user restart mcro.service
+systemctl --user enable mcro.service --now
 systemctl --user daemon-reload
 journalctl --user-unit mcro.service -f
-
