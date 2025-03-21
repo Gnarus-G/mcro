@@ -1,56 +1,88 @@
-use std::error::Error;
-
+use anyhow::Result;
 use evdev::{AttributeSet, EventType, InputEvent, Key};
-
-type Result<T> = std::result::Result<T, Box<dyn Error>>;
+use log::{debug, error, info, trace, warn};
+use std::thread;
 
 fn main() -> Result<()> {
-    let Some((_, mut device)) = evdev::enumerate()
-        .find(|(_, device)| device.name().unwrap() == "PCsensor FootSwitch Keyboard")
-    else {
-        return Ok(());
-    };
+    env_logger::builder().format_timestamp_millis().init();
 
-    device.grab()?;
+    let mut threads = vec![];
 
-    let mut kbd = evdev::uinput::VirtualDeviceBuilder::new()?
-        .name("mcro_kbd")
-        .with_keys(&AttributeSet::from_iter(
-            (0..Key::BTN_TRIGGER_HAPPY1.0).map(Key::new),
-        ))?
-        .build()?;
+    for device_name in ["Controller", "PCsensor FootSwitch Keyboard"] {
+        info!("looking for device: {}", device_name);
+        let Some((_, mut device)) =
+            evdev::enumerate().find(|(_, device)| device.name().unwrap() == device_name)
+        else {
+            warn!("unknown device by name: {}", device_name);
+            continue;
+        };
 
-    loop {
-        for event in device.fetch_events()? {
-            match event.kind() {
-                evdev::InputEventKind::Key(key) => {
-                    if key == Key::KEY_A {
-                        kbd.emit(&[
-                            InputEvent::new(
-                                EventType::KEY,
-                                Key::KEY_LEFTSHIFT.code(),
-                                event.value().min(1),
-                            ),
-                            InputEvent::new(
-                                EventType::KEY,
-                                Key::KEY_LEFTALT.code(),
-                                event.value().min(1),
-                            ),
-                            InputEvent::new(
-                                EventType::KEY,
-                                Key::KEY_RIGHTCTRL.code(),
-                                event.value().min(1),
-                            ),
-                        ])?;
-                    }
+        device.grab()?;
+        debug!("successfully grabbed {:?}", device_name);
+
+        let mut kbd = evdev::uinput::VirtualDeviceBuilder::new()?
+            .name("mcro_kbd")
+            .with_keys(&AttributeSet::from_iter(
+                (0..Key::BTN_TRIGGER_HAPPY1.0).map(Key::new),
+            ))?
+            .build()?;
+
+        let thread_handle = thread::spawn(move || -> Result<()> {
+            info!(
+                "listening to events by '{}': {:04x}:{:04x}",
+                device.name().unwrap_or(device_name),
+                device.input_id().vendor(),
+                device.input_id().product(),
+            );
+
+            loop {
+                for event in device.fetch_events()? {
+                    match event.kind() {
+                        evdev::InputEventKind::Key(key) => {
+                            if key == Key::KEY_A || key == Key::BTN_TL2 {
+                                kbd.emit(&[
+                                    InputEvent::new(
+                                        EventType::KEY,
+                                        Key::KEY_LEFTSHIFT.code(),
+                                        event.value().min(1),
+                                    ),
+                                    InputEvent::new(
+                                        EventType::KEY,
+                                        Key::KEY_LEFTALT.code(),
+                                        event.value().min(1),
+                                    ),
+                                    InputEvent::new(
+                                        EventType::KEY,
+                                        Key::KEY_RIGHTCTRL.code(),
+                                        event.value().min(1),
+                                    ),
+                                ])?;
+                            }
+                        }
+                        evdev::InputEventKind::Synchronization(_) => {
+                            kbd.emit(&[event])?;
+                        }
+                        _ => {
+                            trace!("{:?}", event);
+                        }
+                    };
                 }
-                evdev::InputEventKind::Synchronization(_) => {
-                    kbd.emit(&[event])?;
-                }
-                _ => {
-                    // eprintln!("[DEBUG] {:?}", event);
-                }
-            };
-        }
+            }
+        });
+
+        threads.push(thread_handle);
     }
+
+    debug!(
+        "setup a thread for one of each of the {} device(s)",
+        threads.len()
+    );
+
+    for t in threads {
+        if let Err(err) = t.join().expect("Failed to join on thread") {
+            error!("{err}");
+        };
+    }
+
+    Ok(())
 }

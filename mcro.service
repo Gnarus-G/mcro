@@ -5,6 +5,7 @@ Description=mcro - macros and shortcuts
 WantedBy=default.target
 
 [Service]
+Environment="RUST_LOG=debug"
 ExecStart=%h/.cargo/bin/mcro
 Restart=on-failure
 RestartSec=1
