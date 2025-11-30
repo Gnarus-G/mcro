@@ -37,9 +37,10 @@ fn main() -> Result<()> {
 
             loop {
                 for event in device.fetch_events()? {
+                    trace!("{:?}", event);
                     match event.kind() {
                         evdev::InputEventKind::Key(key) => {
-                            if key == Key::KEY_A || key == Key::BTN_TL2 {
+                            if key == Key::KEY_A || key == Key::BTN_WEST {
                                 kbd.emit(&[
                                     InputEvent::new(
                                         EventType::KEY,
@@ -62,9 +63,7 @@ fn main() -> Result<()> {
                         evdev::InputEventKind::Synchronization(_) => {
                             kbd.emit(&[event])?;
                         }
-                        _ => {
-                            trace!("{:?}", event);
-                        }
+                        _ => {}
                     };
                 }
             }
