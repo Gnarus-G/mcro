@@ -3,6 +3,53 @@ use evdev::{AttributeSet, EventType, InputEvent, Key};
 use log::{debug, error, info, trace, warn};
 use std::thread;
 
+// --- Functional Core (pure, testable) ---
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InEvent {
+    Key { key: Key, value: i32 },
+    Sync,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Action {
+    // Keys to emit with their values (-1 release, 0 repeat, 1 press)
+    EmitKeys(Vec<(Key, i32)>),
+    // Emit a synchronization event
+    EmitSync,
+}
+
+fn clamp_key_value(v: i32) -> i32 {
+    // Kernel sometimes reports >1 for press; we clamp to 1 to stay deterministic
+    if v > 1 {
+        1
+    } else {
+        v
+    }
+}
+
+fn transform(event: InEvent) -> Option<Action> {
+    match event {
+        InEvent::Key { key, value } if key == Key::KEY_A || key == Key::BTN_WEST => {
+            let v = clamp_key_value(value);
+            Some(Action::EmitKeys(vec![
+                (Key::KEY_LEFTSHIFT, v),
+                (Key::KEY_LEFTALT, v),
+                (Key::KEY_RIGHTCTRL, v),
+            ]))
+        }
+        InEvent::Sync => Some(Action::EmitSync),
+        _ => None,
+    }
+}
+
+fn as_input_events(pairs: &[(Key, i32)]) -> Vec<InputEvent> {
+    pairs
+        .iter()
+        .map(|(k, v)| InputEvent::new(EventType::KEY, k.code(), *v))
+        .collect()
+}
+
+// --- Imperative Shell (effects at boundaries) ---
 fn main() -> Result<()> {
     env_logger::builder().format_timestamp_millis().init();
 
@@ -38,33 +85,29 @@ fn main() -> Result<()> {
             loop {
                 for event in device.fetch_events()? {
                     trace!("{:?}", event);
-                    match event.kind() {
-                        evdev::InputEventKind::Key(key) => {
-                            if key == Key::KEY_A || key == Key::BTN_WEST {
-                                kbd.emit(&[
-                                    InputEvent::new(
-                                        EventType::KEY,
-                                        Key::KEY_LEFTSHIFT.code(),
-                                        event.value().min(1),
-                                    ),
-                                    InputEvent::new(
-                                        EventType::KEY,
-                                        Key::KEY_LEFTALT.code(),
-                                        event.value().min(1),
-                                    ),
-                                    InputEvent::new(
-                                        EventType::KEY,
-                                        Key::KEY_RIGHTCTRL.code(),
-                                        event.value().min(1),
-                                    ),
-                                ])?;
+
+                    // Convert to pure domain event
+                    let in_event = match event.kind() {
+                        evdev::InputEventKind::Key(key) => Some(InEvent::Key {
+                            key,
+                            value: event.value(),
+                        }),
+                        evdev::InputEventKind::Synchronization(_) => Some(InEvent::Sync),
+                        _ => None,
+                    };
+
+                    if let Some(action) = in_event.and_then(transform) {
+                        match action {
+                            Action::EmitKeys(pairs) => {
+                                let out = as_input_events(&pairs);
+                                kbd.emit(&out)?;
+                            }
+                            Action::EmitSync => {
+                                // Forward the actual sync event from source
+                                kbd.emit(&[event])?;
                             }
                         }
-                        evdev::InputEventKind::Synchronization(_) => {
-                            kbd.emit(&[event])?;
-                        }
-                        _ => {}
-                    };
+                    }
                 }
             }
         });
