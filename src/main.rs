@@ -37,6 +37,10 @@ fn transform(event: InEvent) -> Option<Action> {
                 (Key::KEY_RIGHTCTRL, v),
             ]))
         }
+        InEvent::Key {
+            key: Key::KEY_B,
+            value,
+        } => Some(Action::EmitKeys(vec![(Key::KEY_SPACE, value)])),
         InEvent::Sync => Some(Action::EmitSync),
         _ => None,
     }
